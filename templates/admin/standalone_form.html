@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div class="unfold-block unfold-main-wrapper">
+    <div class="unfold-block-header">
+        <h1 class="unfold-block-title">{{ title }}</h1>
+    </div>
+
+    <div class="unfold-block-content">
+        <form method="post" class="unfold-form">
+            {% csrf_token %}
+            
+            {% for field in form %}
+                <div class="unfold-form-row">
+                    <div class="unfold-form-label">
+                        {{ field.label_tag }}
+                    </div>
+                    <div class="unfold-form-field">
+                        {{ field }}
+                        {% if field.errors %}
+                            <div class="unfold-form-error">
+                                {{ field.errors }}
+                            </div>
+                        {% endif %}
+                        {% if field.help_text %}
+                            <div class="unfold-form-help">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+
+            <div class="unfold-submit-row">
+                <input type="submit" value="Отправить" class="unfold-button unfold-button-primary">
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
