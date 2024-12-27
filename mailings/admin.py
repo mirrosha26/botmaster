@@ -202,7 +202,7 @@ def create_dynamic_form():
 @admin.register(Mailing)
 class MailingAdmin(ModelAdmin):
     form = create_dynamic_form()
-    inlines = [PollInline, MailingInlineButtonInline, MailingMediaInline]
+    inlines = [MailingInlineButtonInline, MailingMediaInline]
 
     list_display = ('title', 'content_type', 'scheduled_at', 'status', 'created_by', 'created_at')
     list_filter = ('status', 'content_type', 'scheduled_at', 'created_at')
