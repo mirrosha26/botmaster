@@ -121,7 +121,7 @@ class DynamicFieldsProcessor:
             )
         elif field_type == 'multiple_choice':
             return forms.MultipleChoiceField(
-                choices=[(choice, choice) fОпросor choice in field_data.get('choices', [])],
+                choices=[(choice, choice) for choice in field_data.get('choices', [])],
                 widget=UnfoldAdminSelectMultipleWidget,
                 **base_attrs
             )
