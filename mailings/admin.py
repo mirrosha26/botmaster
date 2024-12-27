@@ -62,7 +62,7 @@ class PollInline(TabularInline):
     extra = 0
     ordering = ('weight',)
     fields = ('text', 'weight')
-    verbose_name = "Опрос"
+    verbose_name = "вариант"
     verbose_name_plural = "Опросы"
 
     def formfield_for_dbfield(self, db_field, **kwargs):
@@ -121,7 +121,7 @@ class DynamicFieldsProcessor:
             )
         elif field_type == 'multiple_choice':
             return forms.MultipleChoiceField(
-                choices=[(choice, choice) for choice in field_data.get('choices', [])],
+                choices=[(choice, choice) fОпросor choice in field_data.get('choices', [])],
                 widget=UnfoldAdminSelectMultipleWidget,
                 **base_attrs
             )
