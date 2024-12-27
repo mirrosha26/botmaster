@@ -34,7 +34,7 @@ class MailingInlineButtonInline(TabularInline):
     formset = MailingInlineButtonFormSet
     ordering = ('weight',)
     fields = ('text', 'url', 'callback_data', 'weight')
-    verbose_name = "Кнопка"
+    verbose_name = "элемент"
     verbose_name_plural = "Кнопки"
 
     def formfield_for_dbfield(self, db_field, **kwargs):
@@ -53,7 +53,7 @@ class MailingMediaInline(TabularInline):
     extra = 0
     ordering = ('weight',)
     fields = ('media_type', 'file', 'caption', 'weight')
-    verbose_name = "Медиафайл"
+    verbose_name = "медиафайл"
     verbose_name_plural = "Медиафайлы"
 
 
