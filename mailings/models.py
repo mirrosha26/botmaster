@@ -5,12 +5,14 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.validators import FileExtensionValidator
 import os
 
+
 def mailing_media_path(instance, filename):
     """
     Генерирует путь для сохранения медиафайла:
     media/mailings/{mailing_id}/{media_type}/{filename}
     """
     return f'mailings/{instance.mailing.id}/{instance.media_type}/{filename}'
+
 
 class Mailing(models.Model):
     class Status(models.TextChoices):
@@ -30,7 +32,6 @@ class Mailing(models.Model):
         ANIMATION = 'animation', 'Анимация (GIF)'
         VIDEO_NOTE = 'video_note', 'Видео-кружок'
         MEDIA_GROUP = 'media_group', 'Группа медиафайлов'
-        POLL = 'poll', 'Опрос'
 
     class MediaType(models.TextChoices):
         PHOTO = 'photo', 'Фото'
@@ -47,10 +48,6 @@ class Mailing(models.Model):
         MARKDOWN = 'markdown', 'Markdown'
         MARKDOWN_V2 = 'markdown_v2', 'Markdown V2'
         HTML = 'html', 'HTML'
-
-    class PollType(models.TextChoices):
-        REGULAR = 'regular', 'Обычный опрос'
-        QUIZ = 'quiz', 'Викторина'
 
     title = models.CharField(
         max_length=255,
@@ -147,34 +144,6 @@ class Mailing(models.Model):
         verbose_name='Сообщение об ошибке'
     )
 
-    poll_question = models.CharField(
-        max_length=300,
-        blank=True,
-        null=True,
-        verbose_name='Вопрос опроса'
-    )
-
-    poll_options = models.JSONField(
-        blank=True,
-        null=True,
-        verbose_name='Варианты ответов',
-        help_text='Список вариантов ответа для опроса'
-    )
-
-    poll_type = models.CharField(
-        max_length=10,
-        choices=PollType.choices,
-        default=PollType.REGULAR,
-        verbose_name='Тип опроса'
-    )
-
-    correct_option_id = models.IntegerField(
-        null=True,
-        blank=True,
-        verbose_name='ID правильного ответа',
-        help_text='Для викторины (начиная с 0)'
-    )
-
     class Meta:
         verbose_name = 'Рассылка'
         verbose_name_plural = 'Рассылки'
@@ -184,15 +153,8 @@ class Mailing(models.Model):
         return f"{self.title} ({self.get_status_display()})"
 
     def clean(self):
-        if self.content_type == self.ContentType.POLL:
-            if not self.poll_question or not self.poll_options:
-                raise ValidationError('Для опроса необходимо указать вопрос и варианты ответов')
-            if self.poll_type == self.PollType.QUIZ and self.correct_option_id is None:
-                raise ValidationError('Для викторины необходимо указать правильный ответ')
-            
-        elif self.content_type == self.ContentType.TEXT:
-            if not self.text:
-                raise ValidationError('Текст сообщения обязателен для текстового контента')
+        if self.content_type == self.ContentType.TEXT and not self.text:
+            raise ValidationError('Текст сообщения обязателен для текстового контента')
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -250,8 +212,9 @@ class MailingMedia(models.Model):
         null=True
     )
 
-    order = models.PositiveIntegerField(
+    weight = models.PositiveIntegerField(
         default=0,
+        db_index=True,
         verbose_name='Порядок',
         help_text='Порядок отображения в группе медиафайлов'
     )
@@ -259,7 +222,8 @@ class MailingMedia(models.Model):
     class Meta:
         verbose_name = 'Медиафайл рассылки'
         verbose_name_plural = 'Медиафайлы рассылки'
-        ordering = ['order']
+        ordering = ['weight']
+        unique_together = [('mailing', 'weight')]
 
     def __str__(self):
         return f"Медиафайл {self.get_media_type_display()} для {self.mailing.title}"
@@ -309,3 +273,101 @@ class MailingMedia(models.Model):
             if os.path.isfile(self.file.path):
                 os.remove(self.file.path)
         super().delete(*args, **kwargs)
+
+
+class MailingInlineButton(models.Model):
+    mailing = models.ForeignKey(
+        'Mailing',
+        on_delete=models.CASCADE,
+        related_name='inline_buttons',
+        verbose_name='Рассылка'
+    )
+
+    text = models.CharField(
+        max_length=255,
+        verbose_name='Текст кнопки'
+    )
+
+    url = models.URLField(
+        verbose_name='URL ссылки',
+        blank=True,
+        null=True,
+        help_text='Ссылка для кнопки (если это кнопка-ссылка)'
+    )
+
+    callback_data = models.CharField(
+        max_length=64,
+        verbose_name='Callback data',
+        blank=True,
+        null=True,
+        help_text='Данные для callback-кнопки'
+    )
+
+    weight = models.PositiveIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Порядок',
+        help_text='Порядок отображения кнопки'
+    )
+
+    class Meta:
+        verbose_name = 'Кнопка рассылки'
+        verbose_name_plural = 'Кнопки рассылки'
+        ordering = ['weight']
+        unique_together = [('mailing', 'weight')]
+
+    def __str__(self):
+        return f"Кнопка '{self.text}' для {self.mailing.title}"
+
+    def clean(self):
+        if not self.url and not self.callback_data:
+            raise ValidationError('Необходимо заполнить либо URL, либо callback data')
+        
+        if self.url and self.callback_data:
+            raise ValidationError('Нельзя одновременно использовать URL и callback data')
+        
+        if not self.text:
+            raise ValidationError('Текст кнопки обязателен')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class Poll(models.Model):
+    """Модель для хранения опросов к рассылке"""
+    mailing = models.ForeignKey(
+        'Mailing',
+        on_delete=models.CASCADE,
+        related_name='polls',
+        verbose_name='Рассылка'
+    )
+
+    text = models.CharField(
+        max_length=255,
+        verbose_name='Вариант'
+    )
+
+    weight = models.PositiveIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Порядок',
+        help_text='Порядок отображения варианта'
+    )
+
+    class Meta:
+        verbose_name = 'Вариант ответа'
+        verbose_name_plural = 'Варианты ответа в опросе'
+        ordering = ['weight']
+        unique_together = [('mailing', 'weight')]
+
+    def __str__(self):
+        return f"Опрос {self.weight} для {self.mailing.title}"
+
+    def clean(self):
+        if not self.text:
+            raise ValidationError('Текст варианта обязателен')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)

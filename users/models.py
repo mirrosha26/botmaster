@@ -9,8 +9,8 @@ class User(AbstractUser):
     Наследуемся от AbstractUser для возможности расширения в будущем
     """
     class Meta:
-        verbose_name = 'Пользователь'
-        verbose_name_plural = 'Пользователи'
+        verbose_name = 'Сотрудник'
+        verbose_name_plural = 'Сотрудники'
         
     def __str__(self):
         return self.username
