@@ -97,7 +97,7 @@ def prepare_media_messages(media_files):
             
             messages.append({
                 "type": media.media_type,
-                "media": media.telegram_file_id if media.telegram_file_id else {settings.URL}media/{media.file},
+                "media": media.telegram_file_id if media.telegram_file_id else f"{settings.URL}media/{media.file}",
                 **base_params
             })
             
