@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 
 urlpatterns = [
    path('', lambda request: redirect('admin/')),
-   path('test-api/users/', include('test_present_api.urls')),
+   path('test-api/', include('test_present_api.urls')),
    path('admin/', admin.site.urls),
 ]
 

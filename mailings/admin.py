@@ -15,10 +15,9 @@ from unfold.widgets import (
 )
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.forms import JSONField
-from .models import Mailing, MailingMedia, MailingInlineButton, Poll
+from .models import Mailing, MailingMedia, MailingInlineButton
 from datetime import datetime, date
-from typing import List, Union
+from django.utils.html import format_html
 
 class MailingInlineButtonFormSet(BaseInlineFormSet):
     def __init__(self, *args, **kwargs):
@@ -55,21 +54,6 @@ class MailingMediaInline(TabularInline):
     fields = ('media_type', 'file', 'caption', 'weight')
     verbose_name = "медиафайл"
     verbose_name_plural = "Медиафайлы"
-
-
-class PollInline(TabularInline):
-    model = Poll
-    extra = 0
-    ordering = ('weight',)
-    fields = ('text', 'weight')
-    verbose_name = "вариант"
-    verbose_name_plural = "Опросы"
-
-    def formfield_for_dbfield(self, db_field, **kwargs):
-        field = super().formfield_for_dbfield(db_field, **kwargs)
-        if db_field.name == 'text':
-            field.widget = UnfoldAdminTextInputWidget(attrs={'placeholder': 'Текст опроса'})
-        return field
 
 
 class DynamicFieldsProcessor:
@@ -199,13 +183,14 @@ def create_dynamic_form():
     return ModelFormMetaclass('MailingAdminForm', (MailingAdminForm,), {**{'Meta': MailingAdminForm.Meta}, **json_fields})
 
 
+
 @admin.register(Mailing)
 class MailingAdmin(ModelAdmin):
     form = create_dynamic_form()
     inlines = [MailingInlineButtonInline, MailingMediaInline]
 
-    list_display = ('title', 'content_type', 'scheduled_at', 'status', 'created_by', 'created_at')
-    list_filter = ('status', 'content_type', 'scheduled_at', 'created_at')
+    list_display = ('title', 'scheduled_at', 'status', 'created_by', 'created_at')
+    list_filter = ('status', 'scheduled_at', 'created_at')
     search_fields = ('title', 'text')
     readonly_fields = ('created_at', 'updated_at', 'status', 'error_message', 'created_by')
 
@@ -222,7 +207,6 @@ class MailingAdmin(ModelAdmin):
             ('Основное', {
                 'fields': (
                     'title', 
-                    'content_type',
                     'parse_mode',
                     'text',
                     'disable_web_page_preview',
@@ -274,3 +258,116 @@ class MailingAdmin(ModelAdmin):
         except Exception as e:
             print(f"Error in save_model: {str(e)}")
             raise
+
+
+@admin.register(MailingMedia)
+class MailingMediaAdmin(ModelAdmin):
+    list_display = ['mailing', 'telegram_file_id', 'media_type', 'file_preview_small', 'caption', 'weight']
+    list_filter = ['media_type', 'mailing']
+    search_fields = ['mailing__title', 'caption']
+    readonly_fields = ['file_preview']
+    raw_id_fields = ['mailing']
+
+    # Unfold-specific settings
+    compressed_fields = True
+    warn_unsaved_form = True
+    list_filter_submit = True
+    list_fullwidth = True
+    list_filter_sheet = True
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'caption' in form.base_fields:
+            form.base_fields['caption'].widget = UnfoldAdminTextareaWidget(
+                attrs={'rows': 3, 'placeholder': 'Подпись к медиафайлу'}
+            )
+        return form
+
+    def file_preview(self, obj):
+        if not obj.file:
+            return '-'
+        
+        if obj.media_type == Mailing.MediaType.PHOTO:
+            return format_html(
+                '<div class="unfold-image-preview">'
+                '<img src="{}" style="max-height: 200px; border-radius: 8px;" />'
+                '</div>', 
+                obj.file.url
+            )
+        elif obj.media_type in [Mailing.MediaType.VIDEO, Mailing.MediaType.VIDEO_NOTE]:
+            return format_html(
+                '<div class="unfold-video-preview">'
+                '<video width="320" controls class="rounded-lg">'
+                '<source src="{}" type="video/mp4">'
+                '</video>'
+                '</div>', 
+                obj.file.url
+            )
+        elif obj.media_type == Mailing.MediaType.ANIMATION:
+            return format_html(
+                '<div class="unfold-image-preview">'
+                '<img src="{}" style="max-height: 200px; border-radius: 8px;" />'
+                '</div>', 
+                obj.file.url
+            )
+        else:
+            return format_html(
+                '<div class="unfold-file-preview">'
+                '<a href="{}" target="_blank" '
+                'class="unfold-button unfold-button-primary">'
+                'Просмотреть файл'
+                '</a>'
+                '</div>', 
+                obj.file.url
+            )
+
+    def file_preview_small(self, obj):
+        if not obj.file:
+            return '-'
+        
+        preview_styles = 'class="unfold-preview-link" target="_blank"'
+        
+        if obj.media_type == Mailing.MediaType.PHOTO:
+            return format_html(
+                '<img src="{}" class="unfold-thumbnail" '
+                'style="max-height: 50px; border-radius: 4px;" />', 
+                obj.file.url
+            )
+        elif obj.media_type in [Mailing.MediaType.VIDEO, Mailing.MediaType.VIDEO_NOTE]:
+            return format_html(
+                '📹 <a href="{}" {}>'
+                'Просмотреть видео</a>', 
+                obj.file.url, preview_styles
+            )
+        elif obj.media_type == Mailing.MediaType.ANIMATION:
+            return format_html(
+                '<img src="{}" class="unfold-thumbnail" '
+                'style="max-height: 50px; border-radius: 4px;" />', 
+                obj.file.url
+            )
+        elif obj.media_type == Mailing.MediaType.AUDIO:
+            return format_html(
+                '🎵 <a href="{}" {}>'
+                'Прослушать</a>', 
+                obj.file.url, preview_styles
+            )
+        elif obj.media_type == Mailing.MediaType.VOICE:
+            return format_html(
+                '🎤 <a href="{}" {}>'
+                'Прослушать</a>', 
+                obj.file.url, preview_styles
+            )
+        else:
+            return format_html(
+                '📄 <a href="{}" {}>'
+                'Открыть</a>', 
+                obj.file.url, preview_styles
+            )
+
+    file_preview.short_description = 'Предпросмотр'
+    file_preview_small.short_description = 'Файл'
+
+    class Media:
+        css = {
+            'all': ['admin/css/unfold-media-preview.css']
+        }
