@@ -280,3 +280,12 @@
 }
 
 
+
+
+
+#!/bin/bash
+pip install -r requirements.txt
+python manage.py makemigrations
+python manage.py migrate
+python manage.py collectstatic --noinput
+DJANGO_SUPERUSER_PASSWORD=falcon2602 python manage.py createsuperuser --username admin --email admin@presentsimple.ai --noinput
