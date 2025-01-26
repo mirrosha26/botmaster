@@ -2,6 +2,7 @@ import requests
 from django import forms
 from django.forms.models import ModelForm, ModelFormMetaclass, BaseInlineFormSet
 from django.contrib import admin
+from .api import get_filtered_users
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.widgets import (
@@ -174,7 +175,7 @@ class MailingAdmin(ModelAdmin):
     form = create_dynamic_form()
     inlines = [MailingInlineButtonInline, MailingMediaInline]
 
-    list_display = ('title', 'scheduled_at', 'status', 'created_by', 'created_at', 'delivery_stats')
+    list_display = ('title', 'scheduled_at', 'status', 'created_by', 'created_at', 'delivery_stats', 'expected_users')
     list_filter = ('status', 'scheduled_at', 'created_at')
     search_fields = ('title', 'text')
     readonly_fields = ('created_at', 'updated_at', 'created_by', 'error_message')
@@ -192,7 +193,17 @@ class MailingAdmin(ModelAdmin):
         if total == 0:
             return '-'
         return f"{total_successful}/{total}"
-    delivery_stats.short_description = 'Отправлено'
+    delivery_stats.short_description = 'Доставка'
+
+    def expected_users(self, obj):
+        if obj.status != 'pending':
+            return '-'
+        try:
+            response = get_filtered_users(obj.group_filters, page=1, limit=1)
+            return response.get('count', 0)
+        except Exception as e:
+            return 0
+    expected_users.short_description = 'Кол-во'
 
     def get_fieldsets(self, request, obj=None):
         json_data = get_available_filters()

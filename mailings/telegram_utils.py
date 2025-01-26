@@ -47,8 +47,8 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
 
     sorted_files = sorted(media_files, key=attrgetter('weight'))
 
-    MEDIA_GROUP_TYPES = {'photo', 'video', 'document', 'audio'}
-    SINGLE_TYPES = {'voice', 'video_note', 'animation'}
+    MEDIA_GROUP_TYPES = {'photo', 'video', 'audio'}
+    SINGLE_TYPES = {'voice', 'video_note', 'animation', 'document'}
 
     messages = []
     current_group = []
@@ -77,7 +77,7 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
 
             media_item = {
                 "type": media.media_type,
-                "media": media.telegram_file_id if media.telegram_file_id else f"{settings.URL}media/{media.file}"
+                "media": f"{settings.URL}media/{media.file}"
             }
             if media.caption:
                 media_item["caption"] = media.caption
@@ -97,7 +97,7 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
 
             messages.append({
                 "type": media.media_type,
-                "media": media.telegram_file_id if media.telegram_file_id else f"{settings.URL}media/{media.file}",
+                "media": f"{settings.URL}media/{media.file}",
                 **base_params
             })
 

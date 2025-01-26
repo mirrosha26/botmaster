@@ -18,7 +18,7 @@ class Mailing(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Ожидает отправки'
         PROCESSING = 'processing', 'В процессе'
-        COMPLETED = 'completed', 'Отправлено'
+        COMPLETED = 'completed', 'Передано в бот'
         FAILED = 'failed', 'Ошибка'
         CANCELLED = 'cancelled', 'Отменено'
 
@@ -149,7 +149,6 @@ class Mailing(models.Model):
             if active_buttons and not self.text:
                 raise ValidationError('Текст сообщения обязателен при наличии кнопок')
 
-
 class MailingMedia(models.Model):
     """Модель для хранения медиафайлов рассылки"""
     
@@ -268,6 +267,7 @@ class MailingMedia(models.Model):
             if os.path.isfile(self.file.path):
                 os.remove(self.file.path)
         super().delete(*args, **kwargs)
+
 
 
 class MailingInlineButton(models.Model):
