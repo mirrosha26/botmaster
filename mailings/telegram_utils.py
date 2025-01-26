@@ -77,7 +77,7 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
 
             media_item = {
                 "type": media.media_type,
-                "media": f"{settings.URL}media/{media.file}"
+                "media": f"{settings.BASE_DIR}/media/{media.file}"
             }
             if media.caption:
                 media_item["caption"] = media.caption
@@ -97,7 +97,7 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
 
             messages.append({
                 "type": media.media_type,
-                "media": f"{settings.URL}media/{media.file}",
+                "media": f"{settings.BASE_DIR}/media/{media.file}",
                 **base_params
             })
 
