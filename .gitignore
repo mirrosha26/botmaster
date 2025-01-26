@@ -55,3 +55,4 @@ ENV/
 Thumbs.db
 
 config/settings.py
+host/

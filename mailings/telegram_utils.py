@@ -53,7 +53,7 @@ def prepare_media_messages(media_files) -> List[Dict[str, Any]]:
     messages = []
     current_group = []
     current_weight = None
-    max_group_size = 10  # Максимальный размер медиа группы в Telegram
+    max_group_size = 10 
 
     for media in sorted_files:
         base_params = {
