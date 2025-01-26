@@ -25,6 +25,8 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 media/
+static/
+staticfiles/
 
 # Игнорируем все файлы миграций, кроме __init__.py
 */migrations/*
