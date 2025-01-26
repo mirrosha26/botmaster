@@ -223,14 +223,10 @@
     "count": 100,
     "next_page": "/users/filter?page=2&limit=10",
     "prev_page": null,
-    "data": [
-      {
-        "user_id": "12345",
-        "chat_id": "54321"
-      }
-    ]
+    "data": ["54321", "54322", "54324", "54321", "54321", "54321", "54321", "54321", "54321", "54321"]
   }
   ```
+  
 - **400**: Неверные параметры запроса
   ```json
   {
@@ -282,3 +278,5 @@
     "type": "multiple_choice",
     "choices": ["Python", "JavaScript", "Go", "Rust"]
 }
+
+

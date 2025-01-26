@@ -1,37 +1,39 @@
-# views.py
-from django.views.generic import FormView
-from unfold.views import UnfoldModelAdminViewMixin
-from django import forms
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
+from django.conf import settings
+from .models import MailingBatch, Mailing
+from django.shortcuts import get_object_or_404
 
-class FeedbackForm(forms.Form):
-    name = forms.CharField(
-        max_length=100,
-        widget=forms.TextInput(attrs={'class': 'unfold-input'})
-    )
-    email = forms.EmailField(
-        widget=forms.EmailInput(attrs={'class': 'unfold-input'})
-    )
-    message = forms.CharField(
-        widget=forms.Textarea(attrs={'class': 'unfold-textarea'})
-    )
+class BroadcastStatusView(APIView):
+    def post(self, request):
+        # Проверяем токен из заголовка
+        token = request.headers.get('Authorization')
+        if not token or token != settings.BROADCAST_TOKEN:
+            raise AuthenticationFailed('Неверный токен авторизации')
+            
+        batch_number = request.data.get('batch_number')
+        broadcast_id = request.data.get('broadcast_id')
+        successful_users = request.data.get('successful_users', 0)
+        failed_users = request.data.get('failed_users', 0)
+        error_details = request.data.get('error_details', [])
 
-class FeedbackView(UnfoldModelAdminViewMixin, FormView):
-    title = "Форма обратной связи"
-    template_name = "admin/feedback_form.html"
-    form_class = FeedbackForm
-    permission_required = ()
-    
-    def form_valid(self, form):
-        name = form.cleaned_data['name']
-        email = form.cleaned_data['email']
-        message = form.cleaned_data['message']
-        
-        print(f"Получено сообщение от {name} ({email}): {message}")
-        
-        from django.contrib import messages
-        messages.success(self.request, 'Сообщение успешно отправлено')
-        
-        return super().form_valid(form)
-    
-    def get_success_url(self):
-        return self.model_admin.get_admin_url('changelist')
+        try:
+            mailing = Mailing.objects.get(pk=broadcast_id)
+        except Mailing.DoesNotExist:
+            return Response(
+                {'error': 'Рассылка не найдена'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        batch, created = MailingBatch.objects.update_or_create(
+            mailing=mailing,
+            batch_number=batch_number,
+            defaults={
+                'successful_users': successful_users,
+                'failed_users': failed_users,
+                'error_details': error_details
+            }
+        )
+        return Response({'status': 'ok'}, status=status.HTTP_200_OK)

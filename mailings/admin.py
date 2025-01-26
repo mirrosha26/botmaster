@@ -15,9 +15,11 @@ from unfold.widgets import (
 )
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from .models import Mailing, MailingMedia, MailingInlineButton
+from .models import Mailing, MailingMedia, MailingInlineButton, MailingBatch
 from datetime import datetime, date
 from django.utils.html import format_html
+from .api import get_available_filters
+from django.db.models import Sum
 
 class MailingInlineButtonFormSet(BaseInlineFormSet):
     def __init__(self, *args, **kwargs):
@@ -69,8 +71,9 @@ class DynamicFieldsProcessor:
         }
 
         if field_type == 'choice':
+            choices = [(choice['value'], choice['name']) for choice in field_data.get('choices', [])]
             return forms.ChoiceField(
-                choices=[(choice, choice) for choice in field_data.get('choices', [])],
+                choices=[('', '---------')] + choices,
                 widget=UnfoldAdminSelectWidget,
                 **base_attrs
             )
@@ -88,8 +91,13 @@ class DynamicFieldsProcessor:
                 **base_attrs
             )
         elif field_type == 'boolean':
-            return forms.BooleanField(
-                widget=UnfoldBooleanWidget,
+            return forms.ChoiceField(
+                choices=[
+                    (None, '---------'),
+                    ('true', 'Да'),
+                    ('false', 'Нет')
+                ],
+                widget=UnfoldAdminSelectWidget,
                 **base_attrs
             )
         elif field_type == 'date':
@@ -104,9 +112,10 @@ class DynamicFieldsProcessor:
                 **base_attrs
             )
         elif field_type == 'multiple_choice':
+            choices = [(choice['value'], choice['name']) for choice in field_data.get('choices', [])]
             return forms.MultipleChoiceField(
-                choices=[(choice, choice) for choice in field_data.get('choices', [])],
-                widget=UnfoldAdminSelectMultipleWidget,
+                choices=choices,
+                widget=UnfoldAdminSelectMultipleWidget(attrs={'style': 'height: 100%;'}),
                 **base_attrs
             )
         return forms.CharField(
@@ -115,33 +124,8 @@ class DynamicFieldsProcessor:
         )
 
 
-def fetch_json_from_api(use_mock_data=True):
-    if use_mock_data:
-        return {
-            "data": [
-                {
-                    "group_label": "пример из API (1)",
-                    "fields": [
-                        {"name": "name", "label": "Имя", "type": "text"},
-                        {"name": "age", "label": "Возраст", "type": "number", "min_value": 18, "max_value": 65},
-                        {"name": "is_active", "label": "Активный", "type": "boolean"}
-                    ]
-                },
-                {
-                    "group_label": "пример из API (2)",
-                    "fields": [
-                        {"name": "department", "label": "Отдел", "type": "choice", "choices": ["IT", "HR", "Finance", "Marketing"]},
-                        {"name": "birth_date", "label": "Дата рождения", "type": "date", "min_date": "1900-01-01", "max_date": "2023-12-31"},
-                        {"name": "tags", "label": "Теги", "type": "multiple_choice", "choices": ["Python", "JavaScript", "Go", "Rust"]}
-                    ]
-                }
-            ]
-        }
-    return requests.get('http://127.0.0.1:8000/test-api/users/available-filters/').json()
-
-
 def create_dynamic_form():
-    json_data = fetch_json_from_api()
+    json_data = get_available_filters()
     json_fields = {
         field_data['name']: DynamicFieldsProcessor.create_field_from_json(field_data)
         for group in json_data['data']
@@ -178,10 +162,11 @@ def create_dynamic_form():
                                 value = datetime.fromisoformat(value)
                             except ValueError:
                                 pass
+                        elif isinstance(self.fields[field_name], forms.ChoiceField) and value in [True, False]:
+                            value = str(value).lower()
                         self.fields[field_name].initial = value
 
     return ModelFormMetaclass('MailingAdminForm', (MailingAdminForm,), {**{'Meta': MailingAdminForm.Meta}, **json_fields})
-
 
 
 @admin.register(Mailing)
@@ -189,10 +174,10 @@ class MailingAdmin(ModelAdmin):
     form = create_dynamic_form()
     inlines = [MailingInlineButtonInline, MailingMediaInline]
 
-    list_display = ('title', 'scheduled_at', 'status', 'created_by', 'created_at')
+    list_display = ('title', 'scheduled_at', 'status', 'created_by', 'created_at', 'delivery_stats')
     list_filter = ('status', 'scheduled_at', 'created_at')
     search_fields = ('title', 'text')
-    readonly_fields = ('created_at', 'updated_at', 'status', 'error_message', 'created_by')
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'error_message')
 
     compressed_fields = True
     warn_unsaved_form = True
@@ -200,8 +185,17 @@ class MailingAdmin(ModelAdmin):
     list_fullwidth = True
     list_filter_sheet = True
 
+    def delivery_stats(self, obj):
+        total_successful = obj.total_successful_users
+        total_failed = obj.total_failed_users
+        total = total_successful + total_failed
+        if total == 0:
+            return '-'
+        return f"{total_successful}/{total}"
+    delivery_stats.short_description = 'Отправлено'
+
     def get_fieldsets(self, request, obj=None):
-        json_data = fetch_json_from_api()
+        json_data = get_available_filters()
 
         base_fieldsets = [
             ('Основное', {
@@ -213,6 +207,7 @@ class MailingAdmin(ModelAdmin):
                     'disable_notification',
                     'protect_content',
                     'scheduled_at',
+                    'status',
                 )
             }),
         ]
@@ -232,22 +227,32 @@ class MailingAdmin(ModelAdmin):
                     'created_by',
                     'created_at',
                     'updated_at',
-                    'status',
                     'error_message',
+                    'group_filters'
                 ),
                 'classes': ('collapse',)
             })
         )
-
         return base_fieldsets
 
     def save_model(self, request, obj, form, change):
         try:
-            dynamic_fields = {
-                field_name: value.isoformat() if isinstance(value, (datetime, date)) else value
-                for field_name, value in form.cleaned_data.items()
-                if field_name in form.fields and value not in [None, '', [], {}]
-            }
+            json_data = get_available_filters()
+            available_filter_names = []
+            for group in json_data['data']:
+                available_filter_names.extend(field['name'] for field in group['fields'])
+
+            dynamic_fields = {}
+            for field_name, value in form.cleaned_data.items():
+                if field_name in available_filter_names and value not in [None, '', [], {}]:
+                    if isinstance(value, (datetime, date)):
+                        dynamic_fields[field_name] = value.isoformat()
+                    elif isinstance(value, bool):
+                        dynamic_fields[field_name] = str(value).lower()
+                    elif isinstance(value, (list, tuple)):
+                        dynamic_fields[field_name] = value
+                    else:
+                        dynamic_fields[field_name] = str(value)
 
             obj.group_filters = dynamic_fields
             obj.created_by = request.user
@@ -262,13 +267,12 @@ class MailingAdmin(ModelAdmin):
 
 @admin.register(MailingMedia)
 class MailingMediaAdmin(ModelAdmin):
-    list_display = ['mailing', 'telegram_file_id', 'media_type', 'file_preview_small', 'caption', 'weight']
+    list_display = ['mailing', 'media_type', 'file_preview_small', 'caption', 'weight']
     list_filter = ['media_type', 'mailing']
     search_fields = ['mailing__title', 'caption']
     readonly_fields = ['file_preview']
     raw_id_fields = ['mailing']
 
-    # Unfold-specific settings
     compressed_fields = True
     warn_unsaved_form = True
     list_filter_submit = True
@@ -371,3 +375,9 @@ class MailingMediaAdmin(ModelAdmin):
         css = {
             'all': ['admin/css/unfold-media-preview.css']
         }
+@admin.register(MailingBatch)
+class MailingBatchAdmin(ModelAdmin):
+    list_display = ['mailing', 'batch_number', 'successful_users', 'failed_users', 'created_at']
+    list_filter = ['mailing', 'created_at']
+    search_fields = ['mailing__title']
+    readonly_fields = ['mailing', 'batch_number', 'successful_users', 'failed_users', 'error_details', 'created_at']

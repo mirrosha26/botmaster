@@ -23,12 +23,12 @@ class Mailing(models.Model):
         CANCELLED = 'cancelled', 'Отменено'
 
     class MediaType(models.TextChoices):
-        PHOTO = 'photo', 'Фото'               # send_photo
-        VIDEO = 'video', 'Видео'              # send_video
-        DOCUMENT = 'document', 'Документ'      # send_document
-        AUDIO = 'audio', 'Аудио'              # send_audio
-        VOICE = 'voice', 'Голосовое сообщение' # send_voice
-        ANIMATION = 'animation', 'Анимация'    # send_animation
+        PHOTO = 'photo', 'Фото'                    # send_photo
+        VIDEO = 'video', 'Видео'                   # send_video
+        DOCUMENT = 'document', 'Документ'          # send_document
+        AUDIO = 'audio', 'Аудио'                   # send_audio
+        VOICE = 'voice', 'Голосовое сообщение'     # send_voice
+        ANIMATION = 'animation', 'Анимация'        # send_animation
         VIDEO_NOTE = 'video_note', 'Видео-кружок'  # send_video_note
 
     class ParseMode(models.TextChoices):
@@ -124,7 +124,14 @@ class Mailing(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
-    
+
+    @property
+    def total_successful_users(self):
+        return sum(batch.successful_users for batch in self.batches.all())
+
+    @property 
+    def total_failed_users(self):
+        return sum(batch.failed_users for batch in self.batches.all())
 
     def clean(self):
         # Проверяем, сохранен ли объект
@@ -133,8 +140,10 @@ class Mailing(models.Model):
 
         # Получаем все кнопки, которые не помечены на удаление
         if hasattr(self, 'inline_buttons'):
-            active_buttons = [button for button in self.inline_buttons.all()
-                            if not (hasattr(button, 'DELETE') and button.DELETE)]
+            active_buttons = [
+                button for button in self.inline_buttons.all()
+                if not (hasattr(button, 'DELETE') and button.DELETE)
+            ]
             
             # Проверяем наличие текста, только если есть активные кнопки
             if active_buttons and not self.text:
@@ -148,7 +157,10 @@ class MailingMedia(models.Model):
     MEDIA_TYPE_VALIDATORS = {
         Mailing.MediaType.PHOTO: ['jpg', 'jpeg', 'png', 'webp'],
         Mailing.MediaType.VIDEO: ['mp4', 'avi', 'mov', 'webm'],
-        Mailing.MediaType.DOCUMENT: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'zip', 'rar', 'jpg', 'jpeg', 'png', 'webp','mp4', 'avi', 'mov', 'webm' ],
+        Mailing.MediaType.DOCUMENT: [
+            'pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'zip', 'rar',
+            'jpg', 'jpeg', 'png', 'webp', 'mp4', 'avi', 'mov', 'webm'
+        ],
         Mailing.MediaType.AUDIO: ['mp3', 'wav', 'ogg'],
         Mailing.MediaType.VOICE: ['ogg', 'mp3', 'wav'],
         Mailing.MediaType.ANIMATION: ['gif'],
@@ -157,13 +169,13 @@ class MailingMedia(models.Model):
 
     # Максимальные размеры файлов (в байтах)
     MAX_FILE_SIZES = {
-        Mailing.MediaType.PHOTO: 10 * 1024 * 1024,  # 10MB
-        Mailing.MediaType.VIDEO: 50 * 1024 * 1024,  # 50MB
-        Mailing.MediaType.DOCUMENT: 20 * 1024 * 1024,  # 20MB
-        Mailing.MediaType.AUDIO: 20 * 1024 * 1024,  # 20MB
-        Mailing.MediaType.VOICE: 10 * 1024 * 1024,  # 10MB
+        Mailing.MediaType.PHOTO: 10 * 1024 * 1024,      # 10MB
+        Mailing.MediaType.VIDEO: 50 * 1024 * 1024,      # 50MB
+        Mailing.MediaType.DOCUMENT: 20 * 1024 * 1024,   # 20MB
+        Mailing.MediaType.AUDIO: 20 * 1024 * 1024,      # 20MB
+        Mailing.MediaType.VOICE: 10 * 1024 * 1024,      # 10MB
         Mailing.MediaType.ANIMATION: 10 * 1024 * 1024,  # 10MB
-        Mailing.MediaType.VIDEO_NOTE: 10 * 1024 * 1024,  # 10MB
+        Mailing.MediaType.VIDEO_NOTE: 10 * 1024 * 1024, # 10MB
     }
     
     mailing = models.ForeignKey(
@@ -199,14 +211,6 @@ class MailingMedia(models.Model):
         help_text='Порядок отображения в группе медиафайлов'
     )
 
-    telegram_file_id = models.CharField(
-        max_length=255,
-        verbose_name='ID файла в Telegram',
-        blank=True,
-        null=True,
-        help_text='ID файла после загрузки в Telegram'
-    )
-
     class Meta:
         verbose_name = 'Медиафайл '
         verbose_name_plural = 'Медиафайлы'
@@ -232,7 +236,9 @@ class MailingMedia(models.Model):
         ]
         
         if self.media_type not in allowed_types:
-            raise ValidationError(f'Недопустимый тип медиафайла: {self.get_media_type_display()}')
+            raise ValidationError(
+                f'Недопустимый тип медиафайла: {self.get_media_type_display()}'
+            )
 
         # Проверяем расширение файла
         ext = os.path.splitext(self.file.name)[1][1:].lower()
@@ -254,6 +260,7 @@ class MailingMedia(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+        
 
     def delete(self, *args, **kwargs):
         # Удаляем файл при удалении записи
@@ -320,3 +327,47 @@ class MailingInlineButton(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+
+class MailingBatch(models.Model):
+    mailing = models.ForeignKey(
+        Mailing,
+        on_delete=models.CASCADE,
+        related_name='batches',
+        verbose_name='Рассылка'
+    )
+
+    batch_number = models.PositiveIntegerField(
+        verbose_name='Номер пакета'
+    )
+
+    successful_users = models.PositiveIntegerField(
+        verbose_name='Успешно отправлено',
+        default=0
+    )
+
+    failed_users = models.PositiveIntegerField(
+        verbose_name='Ошибки отправки',
+        default=0
+    )
+
+    error_details = models.JSONField(
+        verbose_name='Детали ошибок',
+        null=True,
+        blank=True,
+        help_text='Список ошибок при отправке'
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Время создания'
+    )
+
+    class Meta:
+        verbose_name = 'Пакет'
+        verbose_name_plural = 'Пакеты'
+        ordering = ['mailing', 'batch_number']
+        unique_together = [('mailing', 'batch_number')]
+
+    def __str__(self):
+        return f"Пакет {self.batch_number} рассылки {self.mailing.title}"

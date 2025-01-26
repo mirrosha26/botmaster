@@ -10,10 +10,6 @@ from unfold.widgets import (
 from .models import User
 from django.contrib.auth.models import Group
 
-
-
-
-
 admin.site.unregister(Group)
 
 class CustomUserCreationForm(UserCreationForm):
@@ -41,7 +37,6 @@ class CustomUserCreationForm(UserCreationForm):
                 'placeholder': 'Подтвердите пароль'
             }
         )
-
 
 @admin.register(User)
 class CustomUserAdmin(ModelAdmin, UserAdmin):

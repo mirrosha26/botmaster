@@ -1,0 +1,20 @@
+POST http://localhost:8000/api/broadcast/status
+Authorization: 5Nmcm5q5N15wAGO5cCC9Q6c7x8K9p2
+Content-Type: application/json
+
+{
+    "batch_number": 1,
+    "broadcast_id": 72,
+    "successful_users": 34,
+    "failed_users": 5,
+    "error_details": [
+        {
+            "user_id": 1001,
+            "error": "Пользователь заблокировал бота"
+        },
+        {
+            "user_id": 1002,
+            "error": "Сообщение не доставлено"
+        }
+    ]
+} 
