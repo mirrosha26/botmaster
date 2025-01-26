@@ -73,7 +73,8 @@ def check_mailings_daemon():
                             'total_batches': total_batches,
                             'broadcast_id': str(mailing.pk)
                         }
-                        #print(broadcast_data)
+                        print(broadcast_data)
+
                         response = requests.post(f'{settings.BROADCAST_URL}/broadcast', json=broadcast_data)
                         print(f"Отправка batch {page}/{total_batches}, статус: {response.status_code}")
                         page += 1
