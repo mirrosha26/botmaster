@@ -149,6 +149,11 @@ class Mailing(models.Model):
             if active_buttons and not self.text:
                 raise ValidationError('Текст сообщения обязателен при наличии кнопок')
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.batches.all().delete()
+
+
 class MailingMedia(models.Model):
     """Модель для хранения медиафайлов рассылки"""
     
@@ -267,7 +272,6 @@ class MailingMedia(models.Model):
             if os.path.isfile(self.file.path):
                 os.remove(self.file.path)
         super().delete(*args, **kwargs)
-
 
 
 class MailingInlineButton(models.Model):
